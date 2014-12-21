@@ -1,0 +1,153 @@
+---
+title: "Practical Machine Learning Final Project"
+author: "Andre Carvalho"
+date: "21-12-2014"
+output: html_document
+---
+
+## Summary
+
+The Human Activity Recognition - HAR - is a recent research area, boosted by data provided by users FitBit, Nike FuelBand and Jawbone Up. Users of these devices want to measure all their body activities, such as sitting, lifting, exercising and so on.
+In this document I will evaluate two classification algorithms, the Generalized Boosting and the Random Forest, against a training data set from one of these devices, used by some subjects, and evaluate the accuracy between them. I will demonstrate that random forest has a better accuracy (more than 98%) and I will use it to classificate the testing data set.
+
+## Data Analyses
+
+The first step to be taken to do the data analyses is to download the training and testing sets. These sets are from HAR data sets and maintained by *Pontifície Universidade Católica* from Rio de Janeiro [@har_pucrio] in http://groupware.les.inf.puc-rio.br/har.
+
+```{r, DownloadData}
+downloadData <- function(fileUrl, filename) {
+    if (!file.exists(filename)) {
+        download.file(url = fileUrl, destfile = filename, method = "curl")
+    }
+}
+
+downloadData('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', 'pml-training.csv')
+downloadData('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv', 'pml-testing.csv')
+```
+
+Reading those data sets with read.csv:
+
+```{r, ReadData}
+training <- read.csv('pml-training.csv', na.strings = c('', 'NA'))
+testing <- read.csv('pml-testing.csv', na.strings = c('', 'NA'))
+```
+
+Now let's print the features of these data sets
+
+```{r, ShowColumns}
+colnames(training)
+```
+
+and it is worth noting that the first feature can be eliminated, since it is just a row id, already presented in the data sets:
+
+```{r, CleaningDataStep01}
+sum(rownames(training) == training[,1]) == nrow(training)
+sum(rownames(testing) == testing[,1]) == nrow(testing)
+```
+
+and it is possible to remove more useless features for machine learning algorithms, such as name, date, timestamp, and window-related variables, used in [@wtlift_stutt13]:
+
+```{r, CleaningDataStep02}
+training <- training[,8:ncol(training)]
+testing <- testing[,8:ncol(testing)]
+```
+
+Now I decided to remove all the features with NAs, since they are not of much help for the classification algorithms. These NAs actually makes impossible to apply certain classification algorithms.
+
+```{r, CleaningDataStep03}
+idx <- sapply(training, function(col) { sum(is.na(col)) == 0 })
+training <- training[, idx]
+testing <- testing[, idx]
+```
+
+The remaining variables are related to **belt**, **forearm**, **arm**, and **dumbell**.
+
+## Machine Learning Algorithm
+
+Now it is time to evaluate the algorithm according to the accuracy given from testing two subsets of training set. Firstly, it is needed to load the libraries, set the seed to 32323 and create the partitions. I used the **createDataPartition** because it get the data from random position in the data set. Since the training data set is sorted by *classe*, it is not a good idea to employ the k-fold strategy.
+
+```{r, BuildingTrainingData}
+library(caret)
+library(gbm)
+library(randomForest)
+
+set.seed(32323)
+
+inTrain1 <- createDataPartition(training$classe, p = 0.2, list = FALSE)
+train1 <- training[inTrain1,]
+inTrain2 <- createDataPartition(training$classe, p = 0.2, list = FALSE)
+train2 <- training[inTrain2,]
+```
+
+The first algorithm evaluated is the Generalized Boosted Regression Models, from **gbm** package:
+
+```{r, TrainGBM, cache=TRUE}
+gbm1 <- train(classe ~ ., method = 'gbm', data = train1, verbose = FALSE)
+pred1 <- predict(gbm1, newdata = train2)
+confusionMatrix(pred1, train2$classe)
+```
+
+The second algorithm evaluated is the Random Forest, from **randomForest** package:
+
+```{r, TrainRandomForest, cache=TRUE}
+rf1 <- randomForest(classe ~ ., data = train2, proximity = TRUE, importance = TRUE)
+pred2 <- predict(rf1, newdata = train1)
+confusionMatrix(pred2, train1$classe)
+```
+
+I decided to take the best between the two algorithms for this data set and apply it for the testing set. After that I will write several files to make the Coursera submission.
+
+```{r, finalPrediction}
+finalPred <- predict(rf1, newdata = testing)
+finalPred
+```
+
+```{r, submission, echo=FALSE, results='hide'}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("data/problem_id_",i,".txt")
+    print(filename)
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(finalPred)
+```
+
+## Conclusion
+
+In my view the Random Forest algorithm used here with these parameters and a larger sample size, since **gbm** performed too slow, I could obtain more than 98% of accuracy and it is possible to classificate the testing data set with more confidence.
+
+## References
+
+---
+references:
+- id: har_pucrio
+  title: Human Activity Recognition
+  url: 'http://groupware.les.inf.puc-rio.br/har'
+  type: webpage
+  issued:
+    year: 2014
+    month: 12
+    day: 21
+- id: wtlift_stutt13
+  title: Qualitative Activity Recognition of Weight Lifting Exercises
+  author:
+  - family: Velloso
+    given: Eduardo
+  - family: Bulling
+    given: Andreas
+  - family: Gellersen
+    given: Hans
+  - family: Ugulino
+    given: Wallace
+  - family: Fuks
+    given: Hugo
+  container-title: Proceedings of 4th International Conference in Cooperation with SIGCHI
+  volume: 11
+  URL: 'http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf'
+  type: article-journal
+  issued:
+    year: 2013
+    month: 3
+---

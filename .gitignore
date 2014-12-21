@@ -9,3 +9,9 @@
 
 # RStudio files
 .Rproj.user/
+
+# Project data
+*.csv
+data/
+PracticalMLFinalProject.html
+PracticalMLFinalProject_cache/
